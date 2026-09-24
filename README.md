@@ -9,7 +9,7 @@ Two parts of **ER AutoModder**, a desktop tool I build for Elden Ring modding:
    a local LLM, and generates Finnish speech in each character's own voice with
    Chatterbox voice cloning.
 
-Full project: [RobinRafaelAna/eldenring-automodder](https://github.com/RobinRafaelAna/eldenring-automodder)
+Full project: [RobinRafaelAna/eldenring-automodder](https://github.com/RobinRafaelAna/eldenring-automodder) - (Private WIP)
 
 ## Part 1: mod merger
 
