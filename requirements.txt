@@ -1,2 +1,4 @@
 soulstruct==2.3.2
 pytest
+# Optional, only for the offline fallback translator (not needed for the tests):
+# argostranslate

@@ -1,13 +1,19 @@
-# ER Mod Merger — code sample
+# ER AutoModder — code sample
 
-The merge engine from **ER AutoModder**, a desktop tool I build for combining several
-Elden Ring mods into one package that the game (via the ME3 mod loader) can run.
-Two mods that both change the same game file normally overwrite each other; this engine
-opens the file formats and merges them at the level of individual records instead.
+Two parts of **ER AutoModder**, a desktop tool I build for Elden Ring modding:
+
+1. **The mod merger**: combines several mods into one package the game (via the ME3 mod
+   loader) can run. Two mods that change the same game file normally overwrite each
+   other; this engine opens the file formats and merges individual records instead.
+2. **The Finnish localisation pipeline**: translates game and mod text into Finnish with
+   a local LLM, and generates Finnish speech in each character's own voice with
+   Chatterbox voice cloning.
 
 Full project: [RobinRafaelAna/eldenring-automodder](https://github.com/RobinRafaelAna/eldenring-automodder)
 
-## What it does
+## Part 1: mod merger
+
+### What it does
 
 `MergeEngine` takes an ordered list of mod folders (highest priority first) and:
 
@@ -27,7 +33,7 @@ Full project: [RobinRafaelAna/eldenring-automodder](https://github.com/RobinRafa
 Every decision becomes a `Conflict` record (type, location, winner, severity) that the
 GUI shows to the user.
 
-## Things worth looking at
+### Things worth looking at
 
 | Where | What it shows |
 |---|---|
@@ -53,6 +59,54 @@ in the code:
 - **Rows silently lost:** vanilla data has 26 rows with duplicate IDs (20 with different
   data); the library kept only the first. They are now preserved in file order.
 
+## Part 2: Finnish localisation (LLM translation + Chatterbox voices)
+
+### Translation
+
+`core/localisation/llm_translate_engine.py` runs a local model (Gemma 3 12B, quantised,
+through llama.cpp's `llama-server`) and talks to it over its OpenAI-compatible HTTP API.
+The server is started once and kept warm: about 0.4 s per line on an RTX 4070, no cloud
+service, no per-request cost.
+
+- **Prompt design came from testing.** Putting the whole glossary in the system prompt
+  made the model keep writing glossary entries until it hit the token limit. What works:
+  a short rule-only system prompt, one example pair, and per line only the glossary
+  terms that actually occur in it.
+- **Output is checked, not trusted.** A translation is rejected if it loses a game tag or
+  placeholder (`<?itemName?>`, `<font>`) or collapses into repetition; that line then
+  goes to the offline fallback translator.
+- Item and place names use a separate prompt: prose keeps proper names, but descriptive
+  names should be translated ("Serpent-Hunter" → "Käärmejahti").
+
+`core/localisation/machine_translate.py` is the fallback (argostranslate, offline) and
+the glossary machinery shared by both:
+
+- Game tags and glossary terms are masked as tokens before translation and restored
+  after. When the model writes a Finnish case ending onto a token, it is attached
+  grammatically: consonant gradation, vowel harmony and stem changes
+  ("Rajahauta" + "ssa" → "Rajahaudassa", "Virtaus" → "Virtauksen").
+- Glossary matching is case-insensitive and keeps the capitalisation of the match
+  ("TORRENT" → "VIRTAUS"); English possessives are derived automatically.
+
+### Speech in the character's own voice
+
+`core/localisation/chatterbox_engine.py` drives Chatterbox Multilingual (Resemble AI,
+MIT), which speaks Finnish directly in a target voice from about ten seconds of
+reference audio: here, the character's own original line. It beat the earlier two-step
+pipeline (Microsoft neural TTS + voice conversion) in listening tests.
+
+- Chatterbox needs its own dependency stack (PyTorch, transformers), so it runs in an
+  isolated virtual environment. The app talks to it through a manifest file and a
+  line-based stdout protocol (`core/localisation/rvc_scripts/er_chatterbox.py`), and the
+  model loads once per batch instead of once per line.
+- **Crash recovery:** a CUDA error kills every later GPU call in the same process. Early
+  on, one bad line failed the other 6,398 in its batch. Now the engine restarts the
+  driver on the remaining lines, retries the crashing line once (generation is random,
+  so a retry often succeeds), and then skips it.
+- A reported success only counts if the audio file really exists.
+
+Setup guides for both external toolchains are in `tools/`.
+
 ## Running the tests
 
 ```
@@ -63,9 +117,11 @@ python -m pytest
 (If another installed package breaks pytest's plugin loading, set
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`.)
 
-The tests build small mods and params in memory. Merging real mods needs the game's own
-files, which cannot be redistributed, so those checks were done against my installed
-game and in game.
+The tests need no game files, models or GPU: they build small mods and params in
+memory, point the LLM engine at a fake HTTP server, and replace the Chatterbox driver
+with a script that speaks the same protocol. Merging real mods needs the game's own
+files, and real translation and speech need the models; those were checked against my
+installed game, and by reading and listening.
 
 ## How it was built
 
