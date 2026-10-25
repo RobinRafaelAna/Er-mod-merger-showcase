@@ -125,7 +125,7 @@ installed game, and by reading and listening.
 
 ## How it was built
 
-I built this project with an AI coding assistant (Claude Code). I decided what to build,
+I built this project with an AI coding assistant (Claude Code). I decided what to build, What code to use, 
 directed the work, did the investigation and testing (including in game), and made the
 calls on what to change. The commit history of the full project shows how the work went.
 
